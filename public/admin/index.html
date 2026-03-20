@@ -5,8 +5,120 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="noindex, nofollow" />
     <title>Quản trị nội dung — Decap CMS</title>
+    <style>
+      #ni-admin-bar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 10000;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 14px;
+        background: #0f1115;
+        border-bottom: 1px solid rgba(212, 175, 55, 0.35);
+        font-family: system-ui, -apple-system, Segoe UI, sans-serif;
+        font-size: 13px;
+      }
+      #ni-admin-bar span {
+        color: #a7b0be;
+      }
+      #ni-admin-bar button {
+        cursor: pointer;
+        border-radius: 10px;
+        border: 1px solid rgba(212, 175, 55, 0.45);
+        background: #171a21;
+        color: #f5d76e;
+        font-weight: 600;
+        padding: 8px 14px;
+        font-size: 13px;
+      }
+      #ni-admin-bar button:hover {
+        background: rgba(212, 175, 55, 0.15);
+      }
+      #ni-spacer {
+        height: 46px;
+      }
+    </style>
   </head>
   <body>
+    <div id="ni-admin-bar">
+      <span>Netlify Identity</span>
+      <button type="button" id="ni-open-login">Đăng nhập / thử widget</button>
+      <span id="ni-status" style="display: none; color: #f5d76e"></span>
+      <button type="button" id="ni-logout" style="display: none">Đăng xuất</button>
+    </div>
+    <div id="ni-spacer" aria-hidden="true"></div>
+
+    <!-- Identity phải load trước Decap (Git Gateway dùng cùng phiên đăng nhập) -->
+    <script src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
+    <script>
+      (function () {
+        function apiUrl() {
+          return window.location.origin + "/.netlify/identity";
+        }
+        function shouldOpenHash(h) {
+          return /invite_token|recovery_token|confirmation_token/i.test(h || "");
+        }
+        var ni = window.netlifyIdentity;
+        if (!ni) return;
+        ni.init({ APIUrl: apiUrl() });
+
+        function refreshBar() {
+          var user = typeof ni.currentUser === "function" ? ni.currentUser() : null;
+          var loginBtn = document.getElementById("ni-open-login");
+          var logoutBtn = document.getElementById("ni-logout");
+          var status = document.getElementById("ni-status");
+          if (user && user.email) {
+            if (loginBtn) loginBtn.style.display = "none";
+            if (logoutBtn) logoutBtn.style.display = "inline-block";
+            if (status) {
+              status.style.display = "inline";
+              status.textContent = "Đã đăng nhập: " + user.email;
+            }
+          } else {
+            if (loginBtn) loginBtn.style.display = "inline-block";
+            if (logoutBtn) logoutBtn.style.display = "none";
+            if (status) status.style.display = "none";
+          }
+        }
+
+        ni.on("init", function (user) {
+          refreshBar();
+          if (shouldOpenHash(window.location.hash)) {
+            ni.open();
+          }
+        });
+        ni.on("login", function () {
+          refreshBar();
+        });
+        ni.on("logout", function () {
+          refreshBar();
+        });
+
+        window.addEventListener("hashchange", function () {
+          if (shouldOpenHash(window.location.hash)) {
+            ni.open();
+          }
+        });
+
+        var openLogin = document.getElementById("ni-open-login");
+        if (openLogin) {
+          openLogin.addEventListener("click", function () {
+            ni.open("login");
+          });
+        }
+        var logoutBtn = document.getElementById("ni-logout");
+        if (logoutBtn) {
+          logoutBtn.addEventListener("click", function () {
+            ni.logout();
+          });
+        }
+      })();
+    </script>
+
     <!-- Decap CMS (Git-based): cấu hình tại ./config.yml -->
     <script src="https://unpkg.com/decap-cms@3/dist/decap-cms.js"></script>
   </body>

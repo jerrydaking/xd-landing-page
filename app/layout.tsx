@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import Header from "@/components/Header";
 import FloatingQuickActions from "@/components/FloatingQuickActions";
+import { NetlifyIdentityProvider } from "@/components/NetlifyIdentityProvider";
 import { getSiteUrl } from "@/lib/siteUrl";
 
 const inter = Inter({
@@ -32,9 +33,11 @@ export default function RootLayout({
   return (
     <html lang="vi" className={`${inter.variable} scroll-smooth`}>
       <body className={inter.className}>
-        <Header />
-        {children}
-        <FloatingQuickActions />
+        <NetlifyIdentityProvider>
+          <Header />
+          {children}
+          <FloatingQuickActions />
+        </NetlifyIdentityProvider>
       </body>
     </html>
   );

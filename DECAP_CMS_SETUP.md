@@ -11,7 +11,13 @@ Hướng dẫn triển khai **Decap CMS** trên **Netlify**, repo Git, và site 
 | `content/news/` | Bài viết Markdown + front matter |
 | `public/uploads/` | Ảnh upload từ CMS → URL `/uploads/...` |
 
-**Lưu ý:** Bảng điều khiển **localStorage** (FAQ, game guides, v.v.) nằm tại **`/site-admin`** (trước đây là `/admin`). **`/admin`** dành cho **Decap CMS**.
+**Lưu ý:** Bảng điều khiển **localStorage** (FAQ, game guides, v.v.) nằm tại **`/site-admin`**. Trang **`/admin/`** (file tĩnh) = **Decap CMS** + **Netlify Identity**.
+
+### Netlify Identity Widget (invite / khôi phục mật khẩu)
+
+- **Các trang Next.js** (`/`, `/news`, …): `components/NetlifyIdentityProvider.tsx` bọc nội dung trong `app/layout.tsx`, khởi tạo `netlify-identity-widget` **chỉ trên client** (dynamic import), tự `open()` khi `location.hash` có `invite_token`, `recovery_token` hoặc `confirmation_token`.
+- **Trang Decap** (`public/admin/index.html`): không đi qua App Router nên **không** có layout React — đã nhúng script Identity (CDN) + thanh cố định (nút đăng nhập / đăng xuất) và cùng logic mở widget theo hash.
+- **Biến tuỳ chọn:** `NEXT_PUBLIC_NETLIFY_IDENTITY_URL` — xem `.env.example` (mặc định trên Netlify: `/.netlify/identity` trên cùng origin).
 
 ---
 
@@ -128,6 +134,23 @@ npx decap-server
 - `app/news/[slug]/page.tsx` — `generateStaticParams` từ `getNewsSlugs()`
 - `app/sitemap.ts` — tin tức từ `getAllNewsArticles()`
 - `app/robots.ts` — thêm `disallow` `/site-admin`
+
+### Netlify Identity Widget (bổ sung)
+
+**Tạo mới**
+
+- `components/NetlifyIdentityProvider.tsx` — init widget trên client, mở theo hash
+- `lib/netlifyIdentityApiUrl.ts` — URL API Identity (env hoặc `/.netlify/identity`)
+- `types/netlify-identity-widget.d.ts` — khai báo module
+
+**Sửa**
+
+- `app/layout.tsx` — bọc `NetlifyIdentityProvider`
+- `public/admin/index.html` — script Identity (CDN), thanh nút đăng nhập / đăng xuất, hash
+- `package.json` — `netlify-identity-widget`
+- `tsconfig.json` — include `types/**/*.d.ts`
+- `.env.example` — `NEXT_PUBLIC_NETLIFY_IDENTITY_URL` (tuỳ chọn)
+- `DECAP_CMS_SETUP.md` — mục Identity
 
 ### Xoá / đổi route
 
