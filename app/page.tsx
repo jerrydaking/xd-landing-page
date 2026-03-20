@@ -6,8 +6,10 @@ import WhyChooseUs from "../components/WhyChooseUs";
 import NewsSection from "../components/NewsSection";
 import FaqSection from "../components/FaqSection";
 import Footer from "../components/Footer";
+import { getNewsPostCards } from "@/lib/newsMarkdown";
 
 export default function HomePage() {
+  const newsCards = getNewsPostCards();
   return (
     <main className="min-h-screen bg-[#0F1115] text-[#F5F7FA]">
       <Hero />
@@ -15,7 +17,7 @@ export default function HomePage() {
       <GameGrid />
       <PromoSection />
       <WhyChooseUs />
-      <NewsSection />
+      <NewsSection posts={newsCards} />
       <FaqSection />
       <Footer />
     </main>

@@ -1,46 +1,9 @@
- "use client";
+"use client";
 
-import { useSyncExternalStore } from "react";
-import { DEFAULT_FAQS, FAQ_STORAGE_KEY, FaqItem, normalizeFaqs } from "@/lib/faqContent";
-
-let cachedRaw: string | null | undefined;
-let cachedFaqs: FaqItem[] = DEFAULT_FAQS;
-
-function parseFaqs(raw: string | null): FaqItem[] {
-  if (!raw) return DEFAULT_FAQS;
-  try {
-    const normalized = normalizeFaqs(JSON.parse(raw));
-    return normalized.length > 0 ? normalized : DEFAULT_FAQS;
-  } catch {
-    return DEFAULT_FAQS;
-  }
-}
-
-function getFaqsSnapshot(): FaqItem[] {
-  if (typeof window === "undefined") return DEFAULT_FAQS;
-  const raw = localStorage.getItem(FAQ_STORAGE_KEY);
-  if (raw === cachedRaw) return cachedFaqs;
-  cachedRaw = raw;
-  cachedFaqs = parseFaqs(raw);
-  return cachedFaqs;
-}
-
-function subscribe(onStoreChange: () => void): () => void {
-  if (typeof window === "undefined") return () => {};
-  const handleStorage = (event: StorageEvent) => {
-    if (event.key === FAQ_STORAGE_KEY) onStoreChange();
-  };
-  const handleFocus = () => onStoreChange();
-  window.addEventListener("storage", handleStorage);
-  window.addEventListener("focus", handleFocus);
-  return () => {
-    window.removeEventListener("storage", handleStorage);
-    window.removeEventListener("focus", handleFocus);
-  };
-}
+import { DEFAULT_FAQS } from "@/lib/faqContent";
 
 export default function FaqSection() {
-  const faqs = useSyncExternalStore(subscribe, getFaqsSnapshot, () => DEFAULT_FAQS);
+  const faqs = DEFAULT_FAQS;
   return (
     <section id="faq" className="border-t border-white/5 bg-[#13171D] py-16 md:py-20">
       <div className="mx-auto max-w-3xl px-4">

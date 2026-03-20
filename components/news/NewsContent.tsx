@@ -1,30 +1,24 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import ArticleRenderer from "@/components/article/ArticleRenderer";
 import BlockEditor from "@/components/article/editor/BlockEditor";
-import { Article, repairMojibake, slugify } from "@/lib/articleContent";
+import { Article, NEWS_STORAGE_KEY, repairMojibake, slugify } from "@/lib/articleContent";
+import { hrefNewsArticle } from "@/lib/newsLinks";
 import { ArticleBlock, contentToBlocks, createBlock, isArticleBlocks } from "@/lib/articleBlocks";
 import { usePersistedAdmin } from "@/hooks/usePersistedAdmin";
-import {
-  DEFAULT_GAME_GUIDES,
-  GAME_GUIDES_STORAGE_KEY,
-  GAME_OPTIONS,
-  type GuideArticle,
-} from "@/lib/gameGuidesContent";
 
-const SYNC_MESSAGE_TYPE = "xocdia-game-guides-sync";
+const SYNC_MESSAGE_TYPE = "xocdia-news-sync";
 
 type ArticleMetaForm = {
   title: string;
   description: string;
   slug: string;
-  game: string;
 };
 
-function repairGuideBlocks(blocks: ArticleBlock[]): ArticleBlock[] {
+function repairArticleBlocks(blocks: ArticleBlock[]): ArticleBlock[] {
   return blocks.map((block) => {
     switch (block.type) {
       case "paragraph":
@@ -47,58 +41,53 @@ function repairGuideBlocks(blocks: ArticleBlock[]): ArticleBlock[] {
   });
 }
 
-function normalizeGuides(raw: unknown): GuideArticle[] {
+function normalizeArticles(raw: unknown): Article[] {
   if (!Array.isArray(raw)) return [];
+  const valid = raw.filter((item) => {
+    if (!item || typeof item !== "object") return false;
+    const article = item as Record<string, unknown>;
+    const validContent = typeof article.content === "string" || isArticleBlocks(article.content);
+    return (
+      typeof article.slug === "string" &&
+      typeof article.title === "string" &&
+      typeof article.description === "string" &&
+      validContent
+    );
+  }) as Article[];
 
-  return raw
-    .filter((item) => {
-      if (!item || typeof item !== "object") return false;
-      const article = item as Record<string, unknown>;
-      const validContent = typeof article.content === "string" || isArticleBlocks(article.content);
-      return (
-        typeof article.slug === "string" &&
-        typeof article.title === "string" &&
-        typeof article.description === "string" &&
-        typeof article.game === "string" &&
-        validContent
-      );
-    })
-    .map((article) => {
-      const item = article as GuideArticle;
-      return {
-        ...item,
-        title: repairMojibake(item.title),
-        description: repairMojibake(item.description),
-        game: repairMojibake(item.game),
-        content:
-          typeof item.content === "string"
-            ? repairMojibake(item.content)
-            : repairGuideBlocks(item.content),
-      };
-    })
-    .filter((item) => GAME_OPTIONS.some((option) => option.slug === item.game));
+  const repaired = valid.map((article) => ({
+    ...article,
+    title: repairMojibake(article.title),
+    description: repairMojibake(article.description),
+    content:
+      typeof article.content === "string"
+        ? repairMojibake(article.content)
+        : repairArticleBlocks(article.content),
+  }));
+
+  return repaired;
 }
 
-function loadGuidesFromStorage(): GuideArticle[] {
-  if (typeof window === "undefined") return DEFAULT_GAME_GUIDES;
+function loadArticlesFromStorage(fallback: Article[]): Article[] {
+  if (typeof window === "undefined") return fallback;
   try {
-    const raw = localStorage.getItem(GAME_GUIDES_STORAGE_KEY);
-    if (!raw) return DEFAULT_GAME_GUIDES;
-    const normalized = normalizeGuides(JSON.parse(raw));
-    if (normalized.length === 0) return DEFAULT_GAME_GUIDES;
+    const raw = localStorage.getItem(NEWS_STORAGE_KEY);
+    if (!raw) return fallback;
+    const normalized = normalizeArticles(JSON.parse(raw));
+    if (normalized.length === 0) return fallback;
     const normalizedJson = JSON.stringify(normalized);
     if (normalizedJson !== raw) {
-      localStorage.setItem(GAME_GUIDES_STORAGE_KEY, normalizedJson);
+      localStorage.setItem(NEWS_STORAGE_KEY, normalizedJson);
     }
     return normalized;
   } catch {
-    return DEFAULT_GAME_GUIDES;
+    return fallback;
   }
 }
 
-function persistGuides(next: GuideArticle[]) {
+function persistArticles(next: Article[]) {
   if (typeof window === "undefined") return;
-  localStorage.setItem(GAME_GUIDES_STORAGE_KEY, JSON.stringify(next));
+  localStorage.setItem(NEWS_STORAGE_KEY, JSON.stringify(next));
 }
 
 function isQuotaExceededError(error: unknown): boolean {
@@ -136,8 +125,8 @@ async function downscaleImageDataUrl(
   return canvas.toDataURL("image/jpeg", quality);
 }
 
-async function optimizeGuidesForStorage(next: GuideArticle[]): Promise<GuideArticle[]> {
-  const optimized: GuideArticle[] = [];
+async function optimizeArticlesForStorage(next: Article[]): Promise<Article[]> {
+  const optimized: Article[] = [];
 
   for (const article of next) {
     if (!isArticleBlocks(article.content)) {
@@ -164,6 +153,7 @@ async function optimizeGuidesForStorage(next: GuideArticle[]): Promise<GuideArti
       }
       blocks.push({ ...block, images: compressedImages });
     }
+
     optimized.push({ ...article, content: blocks });
   }
 
@@ -172,23 +162,23 @@ async function optimizeGuidesForStorage(next: GuideArticle[]): Promise<GuideArti
 
 type PersistResult = {
   ok: boolean;
-  articles: GuideArticle[];
+  articles: Article[];
   mode: "normal" | "compressed" | "without-images" | "failed";
 };
 
-async function persistGuidesSafely(next: GuideArticle[]): Promise<PersistResult> {
+async function persistArticlesSafely(next: Article[]): Promise<PersistResult> {
   if (typeof window === "undefined") return { ok: false, articles: next, mode: "failed" };
 
   try {
-    persistGuides(next);
+    persistArticles(next);
     return { ok: true, articles: next, mode: "normal" };
   } catch (error) {
     if (!isQuotaExceededError(error)) return { ok: false, articles: next, mode: "failed" };
   }
 
   try {
-    const compressed = await optimizeGuidesForStorage(next);
-    persistGuides(compressed);
+    const compressed = await optimizeArticlesForStorage(next);
+    persistArticles(compressed);
     return { ok: true, articles: compressed, mode: "compressed" };
   } catch (error) {
     if (!isQuotaExceededError(error)) return { ok: false, articles: next, mode: "failed" };
@@ -202,64 +192,120 @@ async function persistGuidesSafely(next: GuideArticle[]): Promise<PersistResult>
       );
       return { ...article, content: blocks };
     });
-    persistGuides(withoutImages);
+    persistArticles(withoutImages);
     return { ok: true, articles: withoutImages, mode: "without-images" };
   } catch {
     return { ok: false, articles: next, mode: "failed" };
   }
 }
 
-function GameGuidesContent() {
+function getArticleCoverImage(article: Pick<Article, "slug" | "title">): string | null {
+  const normalized = `${article.slug} ${article.title}`.toLowerCase();
+  if (
+    normalized.includes("huong-dan-tao-tai-khoan") ||
+    normalized.includes("hướng dẫn tạo tài khoản")
+  ) {
+    return "/image/huongdantaotaikhoan.png";
+  }
+  if (
+    normalized.includes("nap-rut-sieu-toc") ||
+    normalized.includes("nạp/rút siêu tốc") ||
+    normalized.includes("nap/rut sieu toc")
+  ) {
+    return "/image/naprutsieutoc.png";
+  }
+  if (
+    normalized.includes("uu-dai-thanh-vien") ||
+    normalized.includes("ưu đãi thành viên")
+  ) {
+    return "/image/cachnhanuudai.png";
+  }
+  if (
+    normalized.includes("dang-nhap") ||
+    normalized.includes("đăng nhập")
+  ) {
+    return "/image/cachdangnhapantoanvanhanhchong.png";
+  }
+  if (
+    normalized.includes("cskh") ||
+    normalized.includes("liên hệ") ||
+    normalized.includes("chăm sóc khách hàng")
+  ) {
+    return "/image/cskh.png";
+  }
+  return null;
+}
+
+export function NewsContent({
+  slugFromPath,
+  repoArticles = [],
+}: {
+  slugFromPath?: string | null;
+  /** Bài từ `content/news` (build) — khách xem luôn dùng danh sách này */
+  repoArticles?: Article[];
+} = {}) {
   const searchParams = useSearchParams();
   const router = useRouter();
 
-  const slug = searchParams.get("slug");
+  const slug = slugFromPath ?? searchParams.get("slug");
   const mode = searchParams.get("mode");
-  const game = searchParams.get("game");
   const persistedAdmin = usePersistedAdmin();
   const isAdmin = searchParams.get("admin") === "1" || persistedAdmin;
+  const openEditFromQuery = searchParams.get("edit") === "1";
 
-  const [articles, setArticles] = useState<GuideArticle[]>(DEFAULT_GAME_GUIDES);
+  const bundledSlugSet = useMemo(
+    () => new Set(repoArticles.map((a) => a.slug)),
+    [repoArticles]
+  );
+
+  const [articles, setArticles] = useState<Article[]>(repoArticles);
   const [ready, setReady] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveNote, setSaveNote] = useState("");
   const [exportJson, setExportJson] = useState("");
+
   const [metaForm, setMetaForm] = useState<ArticleMetaForm>({
     title: "",
     description: "",
     slug: "",
-    game: GAME_OPTIONS[0].slug,
   });
   const [blocks, setBlocks] = useState<ArticleBlock[]>([createBlock("paragraph")]);
 
-  /** Public: chỉ DEFAULT_GAME_GUIDES trong repo. Admin: localStorage để soạn / xuất nháp */
+  /** Public: markdown trong repo. Admin: localStorage (nháp) nếu có, không thì repo. */
   useEffect(() => {
     if (isAdmin) {
-      setArticles(loadGuidesFromStorage());
+      setArticles(loadArticlesFromStorage(repoArticles));
     } else {
-      setArticles(DEFAULT_GAME_GUIDES);
+      setArticles(repoArticles);
     }
     setReady(true);
-  }, [isAdmin]);
+  }, [isAdmin, repoArticles]);
 
   useEffect(() => {
     if (!isAdmin) return;
     const handleMessage = async (event: MessageEvent) => {
       if (!event.data || event.data.type !== SYNC_MESSAGE_TYPE) return;
-      const incoming = normalizeGuides(event.data.payload);
+      const incoming = normalizeArticles(event.data.payload);
       if (incoming.length === 0) {
-        setSaveNote("Không tìm thấy dữ liệu hợp lệ để đồng bộ.");
+        setSaveNote("Không tìm thấy dữ liệu hợp lệ để đồng bộ từ origin cũ.");
         return;
       }
-      const result = await persistGuidesSafely(incoming);
+      const result = await persistArticlesSafely(incoming);
       if (!result.ok) {
         setSaveNote("Đồng bộ thất bại: bộ nhớ trình duyệt hiện tại đã đầy.");
         return;
       }
       setArticles(result.articles);
-      setSaveNote("Đồng bộ dữ liệu thành công từ Chrome cũ.");
+      if (result.mode === "compressed") {
+        setSaveNote("Đồng bộ xong (ảnh đã tự nén để vừa dung lượng).");
+      } else if (result.mode === "without-images") {
+        setSaveNote("Đồng bộ xong nhưng ảnh quá nhiều nên đã bỏ ảnh để lưu.");
+      } else {
+        setSaveNote("Đồng bộ dữ liệu thành công từ Chrome cũ.");
+      }
     };
+
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
   }, [isAdmin]);
@@ -269,7 +315,7 @@ function GameGuidesContent() {
     const target = searchParams.get("target");
     let payload: unknown[] = [];
     try {
-      const raw = localStorage.getItem(GAME_GUIDES_STORAGE_KEY);
+      const raw = localStorage.getItem(NEWS_STORAGE_KEY);
       payload = raw ? JSON.parse(raw) : [];
       setExportJson(JSON.stringify(payload, null, 2));
       if (target && window.opener) {
@@ -283,25 +329,10 @@ function GameGuidesContent() {
     }
   }, [mode, searchParams]);
 
-  const selectedGame = useMemo(
-    () => GAME_OPTIONS.find((option) => option.slug === game) ?? null,
-    [game]
-  );
-
   const currentArticle = useMemo(() => {
-    if (slug) {
-      return articles.find((item) => item.slug === slug) ?? null;
-    }
-    if (mode === "write" || mode === "sync-export") return null;
-    if (!selectedGame) return null;
-    // Open latest article of the selected game directly (skip list view).
-    return articles.find((item) => item.game === selectedGame.slug) ?? null;
-  }, [slug, mode, selectedGame, articles]);
-
-  const filteredArticles = useMemo(() => {
-    if (!selectedGame) return articles;
-    return articles.filter((item) => item.game === selectedGame.slug);
-  }, [articles, selectedGame]);
+    if (!slug) return null;
+    return articles.find((item) => item.slug === slug) ?? null;
+  }, [slug, articles]);
 
   const handleSyncFromAnotherPort = () => {
     if (typeof window === "undefined") return;
@@ -311,10 +342,11 @@ function GameGuidesContent() {
       "http://localhost:3000"
     );
     if (!fromOrigin) return;
-    const popupUrl = `${fromOrigin}/game-guides?mode=sync-export&target=${encodeURIComponent(currentOrigin)}`;
+
+    const popupUrl = `${fromOrigin}/news?mode=sync-export&target=${encodeURIComponent(currentOrigin)}`;
     const popup = window.open(
       popupUrl,
-      "xocdia-game-guides-sync",
+      "xocdia-news-sync",
       "width=680,height=720,menubar=no,toolbar=no,location=yes,status=no"
     );
     if (!popup) {
@@ -324,13 +356,34 @@ function GameGuidesContent() {
     setSaveNote("Đang đồng bộ dữ liệu từ origin cũ...");
   };
 
+  const applyImportedArticles = async (incoming: unknown) => {
+    const normalized = normalizeArticles(incoming);
+    if (normalized.length === 0) {
+      setSaveNote("Không có dữ liệu hợp lệ để nhập.");
+      return;
+    }
+    const result = await persistArticlesSafely(normalized);
+    if (!result.ok) {
+      setSaveNote("Nhập dữ liệu thất bại: bộ nhớ trình duyệt hiện tại đã đầy.");
+      return;
+    }
+    setArticles(result.articles);
+    if (result.mode === "compressed") {
+      setSaveNote("Đã nhập dữ liệu (ảnh tự nén để vừa dung lượng).");
+    } else if (result.mode === "without-images") {
+      setSaveNote("Đã nhập dữ liệu nhưng ảnh quá nhiều nên đã bỏ ảnh để lưu.");
+    } else {
+      setSaveNote("Đã nhập dữ liệu thành công.");
+    }
+  };
+
   const handleExportJson = async () => {
     try {
       const text = JSON.stringify(articles, null, 2);
       await navigator.clipboard.writeText(text);
       setSaveNote("Đã copy dữ liệu JSON vào clipboard.");
     } catch {
-      setSaveNote("Không copy được clipboard. Hãy dùng /game-guides?mode=sync-export để copy thủ công.");
+      setSaveNote("Không copy được clipboard. Hãy dùng /news?mode=sync-export để copy thủ công.");
     }
   };
 
@@ -341,18 +394,7 @@ function GameGuidesContent() {
         setSaveNote("Clipboard đang trống.");
         return;
       }
-      const incoming = normalizeGuides(JSON.parse(text));
-      if (incoming.length === 0) {
-        setSaveNote("Không có dữ liệu hợp lệ để nhập.");
-        return;
-      }
-      const result = await persistGuidesSafely(incoming);
-      if (!result.ok) {
-        setSaveNote("Nhập dữ liệu thất bại: bộ nhớ trình duyệt hiện tại đã đầy.");
-        return;
-      }
-      setArticles(result.articles);
-      setSaveNote("Đã nhập dữ liệu thành công.");
+      await applyImportedArticles(JSON.parse(text));
     } catch {
       setSaveNote("Không đọc được clipboard hoặc JSON không hợp lệ.");
     }
@@ -361,12 +403,7 @@ function GameGuidesContent() {
   useEffect(() => {
     if (mode === "write") {
       setEditOpen(false);
-      setMetaForm({
-        title: "",
-        description: "",
-        slug: "",
-        game: selectedGame?.slug ?? GAME_OPTIONS[0].slug,
-      });
+      setMetaForm({ title: "", description: "", slug: "" });
       setBlocks([createBlock("section"), createBlock("paragraph")]);
       return;
     }
@@ -376,11 +413,15 @@ function GameGuidesContent() {
         title: currentArticle.title,
         description: currentArticle.description,
         slug: currentArticle.slug,
-        game: currentArticle.game,
       });
       setBlocks(contentToBlocks(currentArticle.content));
     }
-  }, [mode, currentArticle, selectedGame]);
+  }, [mode, currentArticle]);
+
+  useEffect(() => {
+    if (!openEditFromQuery || !isAdmin || !currentArticle) return;
+    setEditOpen(true);
+  }, [openEditFromQuery, isAdmin, currentArticle]);
 
   const handleCreate = async () => {
     const finalSlug = slugify(metaForm.slug || metaForm.title);
@@ -392,37 +433,35 @@ function GameGuidesContent() {
       setSaveNote("Nội dung đang trống.");
       return;
     }
-    if (!GAME_OPTIONS.some((item) => item.slug === metaForm.game)) {
-      setSaveNote("Vui lòng chọn danh mục game hợp lệ.");
-      return;
-    }
     if (articles.some((item) => item.slug === finalSlug)) {
       setSaveNote("Slug đã tồn tại, vui lòng đổi slug.");
       return;
     }
 
     setSaving(true);
-    const nextArticle: GuideArticle = {
+    const nextArticle: Article = {
       slug: finalSlug,
-      game: metaForm.game,
       title: metaForm.title.trim(),
       description: metaForm.description.trim(),
       content: blocks,
     };
     const next = [nextArticle, ...articles];
-    const result = await persistGuidesSafely(next);
-    setSaving(false);
+    const result = await persistArticlesSafely(next);
     if (!result.ok) {
+      setSaving(false);
       setSaveNote("Lưu thất bại: dung lượng bộ nhớ trình duyệt đã đầy.");
       return;
     }
     setArticles(result.articles);
-    setSaveNote("Đã đăng bài mới.");
-    const q = new URLSearchParams();
-    q.set("slug", finalSlug);
-    if (isAdmin) q.set("admin", "1");
-    q.set("game", metaForm.game);
-    router.push(`/game-guides?${q.toString()}`);
+    setSaving(false);
+    if (result.mode === "compressed") {
+      setSaveNote("Đã đăng bài mới (ảnh đã tự nén để vừa dung lượng).");
+    } else if (result.mode === "without-images") {
+      setSaveNote("Đã đăng bài, nhưng ảnh quá nhiều nên đã bỏ ảnh để lưu được.");
+    } else {
+      setSaveNote("Đã đăng bài mới.");
+    }
+    router.push(hrefNewsArticle(finalSlug, { admin: isAdmin }, bundledSlugSet));
   };
 
   const handleUpdate = async () => {
@@ -435,32 +474,37 @@ function GameGuidesContent() {
       setSaveNote("Nội dung đang trống.");
       return;
     }
-    if (!GAME_OPTIONS.some((item) => item.slug === metaForm.game)) {
-      setSaveNote("Vui lòng chọn danh mục game hợp lệ.");
-      return;
-    }
 
     setSaving(true);
     const next = articles.map((item) =>
       item.slug === currentArticle.slug
         ? {
             ...item,
-            game: metaForm.game,
             title: metaForm.title.trim(),
             description: metaForm.description.trim(),
             content: blocks,
           }
         : item
     );
-    const result = await persistGuidesSafely(next);
-    setSaving(false);
+    const result = await persistArticlesSafely(next);
     if (!result.ok) {
+      setSaving(false);
       setSaveNote("Lưu thất bại: dung lượng bộ nhớ trình duyệt đã đầy.");
       return;
     }
     setArticles(result.articles);
+    setSaving(false);
     setEditOpen(false);
-    setSaveNote("Đã lưu thay đổi.");
+    if (openEditFromQuery && currentArticle) {
+      router.replace(hrefNewsArticle(currentArticle.slug, { admin: isAdmin }, bundledSlugSet));
+    }
+    if (result.mode === "compressed") {
+      setSaveNote("Đã lưu thay đổi (ảnh đã tự nén để vừa dung lượng).");
+    } else if (result.mode === "without-images") {
+      setSaveNote("Đã lưu thay đổi, nhưng ảnh quá nhiều nên đã bỏ ảnh để lưu được.");
+    } else {
+      setSaveNote("Đã lưu thay đổi.");
+    }
   };
 
   if (!ready) {
@@ -477,8 +521,7 @@ function GameGuidesContent() {
         <div className="mx-auto max-w-3xl px-4 py-12">
           <p className="text-lg font-semibold text-[#F5D76E]">Xuất dữ liệu đồng bộ</p>
           <p className="mt-2 text-sm text-[#A7B0BE]">
-            Nếu popup tự đồng bộ không chạy, hãy copy JSON này rồi qua tab/port mới bấm
-            &quot;Nhập từ clipboard&quot;.
+            Nếu popup tự đồng bộ không chạy, hãy copy JSON này rồi qua tab/port mới bấm &quot;Nhập từ clipboard&quot;.
           </p>
           <textarea
             readOnly
@@ -486,6 +529,28 @@ function GameGuidesContent() {
             rows={14}
             className="mt-4 w-full rounded-lg border border-white/10 bg-[#10151E] px-3 py-2 text-xs leading-6 text-[#C8D1DE]"
           />
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(exportJson || "[]");
+                } catch {
+                  // ignore
+                }
+              }}
+              className="rounded-lg border border-[#D4AF37]/50 bg-[#171A21] px-3 py-1.5 text-sm font-semibold text-[#F5D76E]"
+            >
+              Copy JSON
+            </button>
+            <button
+              type="button"
+              onClick={() => window.close()}
+              className="rounded-lg border border-white/15 bg-[#171A21] px-3 py-1.5 text-sm text-[#C8D1DE]"
+            >
+              Đóng
+            </button>
+          </div>
         </div>
       </main>
     );
@@ -495,18 +560,10 @@ function GameGuidesContent() {
     return (
       <main className="min-h-screen bg-[#0F1115] text-[#F5F7FA]">
         <section className="mx-auto max-w-6xl px-4 py-12">
-          <div className="mb-6">
-            <div className="mb-2 flex items-center gap-1.5">
-              <Link href="/#games" className="text-[13px] font-medium text-white/50 transition hover:text-[#F5D76E]">
-                ‹ Quay lại
-              </Link>
-              {selectedGame && (
-                <>
-                  <span className="text-[10px] text-white/20">·</span>
-                  <span className="text-[13px] font-semibold uppercase tracking-[0.18em] text-[#D4AF37]">{selectedGame.title}</span>
-                </>
-              )}
-            </div>
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+            <Link href={isAdmin ? "/news?admin=1" : "/news"} className="text-sm font-semibold text-[#D4AF37] hover:text-[#F5D76E]">
+              ← Quay lại tin tức
+            </Link>
             <h1 className="text-2xl font-black text-white md:text-3xl">Viết bài viết mới</h1>
           </div>
 
@@ -529,30 +586,14 @@ function GameGuidesContent() {
               />
             </div>
           </div>
-          <div className="mb-4 grid gap-4 md:grid-cols-2">
-            <div>
-              <label className="block text-xs font-medium text-[#A7B0BE]">Danh mục game</label>
-              <select
-                value={metaForm.game}
-                onChange={(e) => setMetaForm((prev) => ({ ...prev, game: e.target.value }))}
-                className="mt-1 w-full rounded-lg border border-white/10 bg-[#10151E] px-3 py-2 text-[#F5F7FA]"
-              >
-                {GAME_OPTIONS.map((option) => (
-                  <option key={option.slug} value={option.slug}>
-                    {option.title}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-[#A7B0BE]">Mô tả ngắn</label>
-              <textarea
-                value={metaForm.description}
-                onChange={(e) => setMetaForm((prev) => ({ ...prev, description: e.target.value }))}
-                rows={3}
-                className="mt-1 w-full rounded-lg border border-white/10 bg-[#10151E] px-3 py-2 leading-7 text-[#C8D1DE]"
-              />
-            </div>
+          <div className="mb-4">
+            <label className="block text-xs font-medium text-[#A7B0BE]">Mô tả ngắn</label>
+            <textarea
+              value={metaForm.description}
+              onChange={(e) => setMetaForm((prev) => ({ ...prev, description: e.target.value }))}
+              rows={3}
+              className="mt-1 w-full rounded-lg border border-white/10 bg-[#10151E] px-3 py-2 leading-7 text-[#C8D1DE]"
+            />
           </div>
 
           <BlockEditor
@@ -562,6 +603,7 @@ function GameGuidesContent() {
             onSave={handleCreate}
             saving={saving}
           />
+
           {saveNote && <p className="text-sm text-emerald-400">{saveNote}</p>}
         </section>
       </main>
@@ -572,13 +614,9 @@ function GameGuidesContent() {
     return (
       <main className="min-h-screen bg-[#0F1115] text-[#F5F7FA]">
         <div className="mx-auto max-w-2xl px-4 py-12 text-center">
-          <div className="flex items-center gap-1.5">
-            <Link href="/#games" className="text-[13px] font-medium text-white/50 transition hover:text-[#F5D76E]">
-              ‹ Quay lại
-            </Link>
-            <span className="text-[10px] text-white/20">·</span>
-            <span className="text-[13px] font-semibold uppercase tracking-[0.18em] text-[#D4AF37]">Trò chơi nổi bật</span>
-          </div>
+          <Link href={isAdmin ? "/news?admin=1" : "/news"} className="inline-block text-sm font-semibold text-[#D4AF37] hover:text-[#F5D76E]">
+            ← Quay lại tin tức
+          </Link>
           <p className="mt-8 text-[#A7B0BE]">Không tìm thấy bài viết.</p>
         </div>
       </main>
@@ -586,55 +624,30 @@ function GameGuidesContent() {
   }
 
   if (currentArticle) {
-    const gameTitle = GAME_OPTIONS.find((item) => item.slug === currentArticle.game)?.title;
     return (
       <main className="min-h-screen bg-[#0F1115] text-[#F5F7FA]">
         <article className="mx-auto max-w-4xl px-4 py-12">
-          {isAdmin && (
-            <div className="mb-4 flex flex-wrap items-center justify-end gap-2">
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+            <Link href={isAdmin ? "/news?admin=1" : "/news"} className="text-sm font-semibold text-[#D4AF37] hover:text-[#F5D76E]">
+              ← Quay lại tin tức
+            </Link>
+            {isAdmin && (
               <button
                 type="button"
-                onClick={handleSyncFromAnotherPort}
-                className="rounded-xl border border-white/15 bg-[#171A21] px-4 py-2 text-sm font-semibold text-[#C9D0DC] transition hover:border-[#D4AF37]/35 hover:text-[#F5D76E]"
-              >
-                Đồng bộ từ Chrome cũ
-              </button>
-              <button
-                type="button"
-                onClick={handleExportJson}
-                className="rounded-xl border border-white/15 bg-[#171A21] px-4 py-2 text-sm font-semibold text-[#C9D0DC] transition hover:border-[#D4AF37]/35 hover:text-[#F5D76E]"
-              >
-                Xuất dữ liệu
-              </button>
-              <button
-                type="button"
-                onClick={handleImportFromClipboard}
-                className="rounded-xl border border-white/15 bg-[#171A21] px-4 py-2 text-sm font-semibold text-[#C9D0DC] transition hover:border-[#D4AF37]/35 hover:text-[#F5D76E]"
-              >
-                Nhập từ clipboard
-              </button>
-              <button
-                type="button"
-                onClick={() => setEditOpen((prev) => !prev)}
+                onClick={() => {
+                  if (editOpen) {
+                    setEditOpen(false);
+                    if (openEditFromQuery && currentArticle) {
+                      router.replace(hrefNewsArticle(currentArticle.slug, { admin: isAdmin }, bundledSlugSet));
+                    }
+                  } else {
+                    setEditOpen(true);
+                  }
+                }}
                 className="rounded-xl border border-[#D4AF37]/50 bg-[#171A21] px-4 py-2 text-sm font-semibold text-[#F5D76E] transition hover:bg-[#D4AF37]/20"
               >
                 {editOpen ? "Đóng sửa" : "Sửa nội dung"}
               </button>
-            </div>
-          )}
-
-          <div className="mb-2 flex items-center gap-1.5">
-            <Link
-              href="/#games"
-              className="text-[13px] font-medium text-white/50 transition hover:text-[#F5D76E]"
-            >
-              ‹ Quay lại
-            </Link>
-            {gameTitle && (
-              <>
-                <span className="text-[10px] text-white/20">·</span>
-                <span className="text-[13px] font-semibold uppercase tracking-[0.18em] text-[#D4AF37]">{gameTitle}</span>
-              </>
             )}
           </div>
 
@@ -650,27 +663,13 @@ function GameGuidesContent() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-[#A7B0BE]">Danh mục game</label>
-                  <select
-                    value={metaForm.game}
-                    onChange={(e) => setMetaForm((prev) => ({ ...prev, game: e.target.value }))}
+                  <label className="block text-xs font-medium text-[#A7B0BE]">Mô tả ngắn</label>
+                  <input
+                    value={metaForm.description}
+                    onChange={(e) => setMetaForm((prev) => ({ ...prev, description: e.target.value }))}
                     className="mt-1 w-full rounded-lg border border-white/10 bg-[#10151E] px-3 py-2 text-[#F5F7FA]"
-                  >
-                    {GAME_OPTIONS.map((option) => (
-                      <option key={option.slug} value={option.slug}>
-                        {option.title}
-                      </option>
-                    ))}
-                  </select>
+                  />
                 </div>
-              </div>
-              <div className="mb-4">
-                <label className="block text-xs font-medium text-[#A7B0BE]">Mô tả ngắn</label>
-                <input
-                  value={metaForm.description}
-                  onChange={(e) => setMetaForm((prev) => ({ ...prev, description: e.target.value }))}
-                  className="mt-1 w-full rounded-lg border border-white/10 bg-[#10151E] px-3 py-2 text-[#F5F7FA]"
-                />
               </div>
               <BlockEditor
                 blocks={blocks}
@@ -698,10 +697,17 @@ function GameGuidesContent() {
       <section className="mx-auto max-w-7xl px-4 py-16">
         <div className="mb-10 flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.3em] text-[#D4AF37]">Cẩm nang game</p>
-            <h1 className="mt-3 text-3xl font-black text-white md:text-4xl">
-              {selectedGame ? `Tân Thủ ${selectedGame.title}` : "Tân Thủ XOCDIA88"}
-            </h1>
+            <div className="mb-2 flex items-center gap-1.5">
+              <Link
+                href="/#news"
+                className="text-[13px] font-medium text-white/50 transition hover:text-[#F5D76E]"
+              >
+                ‹ Quay lại
+              </Link>
+              <span className="text-[10px] text-white/20">·</span>
+              <span className="text-[13px] font-semibold uppercase tracking-[0.18em] text-[#D4AF37]">Cẩm nang</span>
+            </div>
+            <h1 className="text-3xl font-black text-white md:text-4xl">Tân Thủ XOCDIA88</h1>
           </div>
           {isAdmin && (
             <div className="flex flex-wrap gap-2">
@@ -727,62 +733,64 @@ function GameGuidesContent() {
                 Nhập từ clipboard
               </button>
               <Link
-                href={selectedGame ? `/game-guides?mode=write&game=${encodeURIComponent(selectedGame.slug)}&admin=1` : "/game-guides?mode=write&admin=1"}
+                href="/news?mode=write&admin=1"
                 className="rounded-xl border border-[#D4AF37]/50 bg-[#171A21] px-4 py-2 text-sm font-semibold text-[#F5D76E] transition hover:bg-[#D4AF37]/20"
               >
-                Đăng bài
+                Viết bài viết
               </Link>
             </div>
           )}
         </div>
         {saveNote && <p className="mb-5 text-sm text-emerald-400">{saveNote}</p>}
 
-        {filteredArticles.length === 0 ? (
-          <div className="rounded-2xl border border-white/10 bg-[#171A21] p-6">
-            <p className="text-[#A7B0BE]">
-              Chưa có bài viết cho mục này. Bấm <span className="font-semibold text-[#F5D76E]">Đăng bài</span> để tạo bài đầu tiên.
-            </p>
-          </div>
-        ) : (
-          <div className="grid gap-6 md:grid-cols-3">
-            {filteredArticles.map((item) => (
-              <article
-                key={item.slug}
-                className="overflow-hidden rounded-[28px] border border-white/8 bg-[#171A21] transition hover:border-[#D4AF37]/25"
-              >
-                <div className="relative h-48 w-full bg-gradient-to-br from-[#2A2110] via-[#171A21] to-[#0F1115] md:h-56">
-                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(245,215,110,0.08),transparent_40%)]" />
-                </div>
-                <div className="p-6">
-                  <h2 className="text-xl font-black text-[#F5D76E] md:text-2xl">{item.title}</h2>
-                  <p className="mt-3 line-clamp-3 leading-7 text-[#A7B0BE]">{item.description}</p>
+        <div className="grid gap-6 md:grid-cols-3">
+          {articles.map((item) => (
+            <article
+              key={item.slug}
+              className="overflow-hidden rounded-[28px] border border-white/8 bg-[#171A21] transition hover:border-[#D4AF37]/25"
+            >
+              <div className="relative h-48 md:h-56 w-full bg-gradient-to-br from-[#2A2110] via-[#171A21] to-[#0F1115]">
+                {getArticleCoverImage(item) ? (
+                  <div
+                    className="absolute inset-0 bg-cover bg-center"
+                    style={{ backgroundImage: `url(${getArticleCoverImage(item)})` }}
+                  />
+                ) : null}
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(245,215,110,0.08),transparent_40%)]" />
+              </div>
+              <div className="p-6">
+                <h2 className="text-xl font-black text-[#F5D76E] md:text-2xl">{item.title}</h2>
+                <p className="mt-3 line-clamp-3 leading-7 text-[#A7B0BE]">{item.description}</p>
+                <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2">
                   <Link
-                    href={`/game-guides?slug=${encodeURIComponent(item.slug)}${isAdmin ? "&admin=1" : ""}${game ? `&game=${encodeURIComponent(game)}` : ""}`}
-                    className="mt-5 inline-block text-sm font-bold text-[#D4AF37] transition hover:text-[#F5D76E]"
+                    href={hrefNewsArticle(item.slug, { admin: isAdmin }, bundledSlugSet)}
+                    className="inline-block text-sm font-bold text-[#D4AF37] transition hover:text-[#F5D76E]"
                   >
-                    Xem chi tiết →
+                    Xem thêm →
                   </Link>
+                  {isAdmin ? (
+                    <Link
+                      href={hrefNewsArticle(item.slug, { admin: true, edit: true }, bundledSlugSet)}
+                      className="inline-flex items-center gap-1.5 text-sm font-bold text-[#C9A227]/90 transition hover:text-[#F5D76E]"
+                      title="Sửa bài viết"
+                    >
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" aria-hidden="true">
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                        />
+                      </svg>
+                      Sửa
+                    </Link>
+                  ) : null}
                 </div>
-              </article>
-            ))}
-          </div>
-        )}
+              </div>
+            </article>
+          ))}
+        </div>
       </section>
     </main>
-  );
-}
-
-export default function GameGuidesPage() {
-  return (
-    <Suspense
-      fallback={
-        <main className="flex min-h-screen items-center justify-center bg-[#0F1115]">
-          <p className="text-[#A7B0BE]">Đang tải...</p>
-        </main>
-      }
-    >
-      <GameGuidesContent />
-    </Suspense>
   );
 }
 

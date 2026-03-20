@@ -10,6 +10,12 @@ import {
 
 const sections = [
   {
+    title: "Decap CMS (tin tức Git)",
+    desc: "Soạn bài trong repo → commit — mở giao diện quản trị tại /admin.",
+    href: "/admin/",
+    decap: true as const,
+  },
+  {
     title: "Cẩm nang Tân Thủ",
     desc: "Quản lý bài viết kênh Cẩm nang (thêm / sửa / xóa / đồng bộ).",
     href: "/news?admin=1",
@@ -26,7 +32,7 @@ const sections = [
   },
 ];
 
-export default function AdminPage() {
+export default function SiteAdminPage() {
   const [authenticated, setAuthenticated] = useState(false);
   const [checking, setChecking] = useState(true);
   const [email, setEmail] = useState("");
@@ -88,7 +94,7 @@ export default function AdminPage() {
             Đăng nhập quản trị
           </h1>
           <p className="mt-2 text-sm text-[#A7B0BE]">
-            Nhập email và mật khẩu để truy cập Bảng quản trị.
+            Nhập email và mật khẩu để truy cập Bảng quản trị (local).
           </p>
           <form onSubmit={handleLogin} className="mt-6 space-y-4">
             <div>
@@ -161,28 +167,48 @@ export default function AdminPage() {
         </div>
 
         <h1 className="mt-4 text-3xl font-black text-white md:text-4xl">
-          Bảng quản trị
+          Bảng quản trị (local)
         </h1>
         <p className="mt-2 text-[#A7B0BE]">
-          Chọn mục cần quản lý. Tất cả dữ liệu lưu trong localStorage trình duyệt hiện tại.
+          Chọn mục cần quản lý. Các kênh FAQ / Game còn lưu trong localStorage trình duyệt; tin tức chính nên dùng Decap CMS tại{" "}
+          <a href="/admin/" className="font-semibold text-[#D4AF37] hover:text-[#F5D76E]">
+            /admin
+          </a>
+          .
         </p>
 
-        <div className="mt-10 grid gap-5 md:grid-cols-3">
-          {sections.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className="group rounded-2xl border border-white/8 bg-[#171A21] p-6 transition hover:border-[#D4AF37]/30 hover:shadow-lg hover:shadow-[#D4AF37]/5"
-            >
-              <h2 className="text-lg font-black text-[#F5D76E] transition group-hover:text-[#F8E08A]">
-                {item.title}
-              </h2>
-              <p className="mt-2 text-sm leading-6 text-[#A7B0BE]">{item.desc}</p>
-              <span className="mt-4 inline-block text-sm font-semibold text-[#D4AF37] transition group-hover:text-[#F5D76E]">
-                Mở quản lý →
-              </span>
-            </Link>
-          ))}
+        <div className="mt-10 grid gap-5 md:grid-cols-2">
+          {sections.map((item) =>
+            "decap" in item && item.decap ? (
+              <a
+                key={item.href}
+                href={item.href}
+                className="group rounded-2xl border border-white/8 bg-[#171A21] p-6 transition hover:border-[#D4AF37]/30 hover:shadow-lg hover:shadow-[#D4AF37]/5"
+              >
+                <h2 className="text-lg font-black text-[#F5D76E] transition group-hover:text-[#F8E08A]">
+                  {item.title}
+                </h2>
+                <p className="mt-2 text-sm leading-6 text-[#A7B0BE]">{item.desc}</p>
+                <span className="mt-4 inline-block text-sm font-semibold text-[#D4AF37] transition group-hover:text-[#F5D76E]">
+                  Mở Decap CMS →
+                </span>
+              </a>
+            ) : (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="group rounded-2xl border border-white/8 bg-[#171A21] p-6 transition hover:border-[#D4AF37]/30 hover:shadow-lg hover:shadow-[#D4AF37]/5"
+              >
+                <h2 className="text-lg font-black text-[#F5D76E] transition group-hover:text-[#F8E08A]">
+                  {item.title}
+                </h2>
+                <p className="mt-2 text-sm leading-6 text-[#A7B0BE]">{item.desc}</p>
+                <span className="mt-4 inline-block text-sm font-semibold text-[#D4AF37] transition group-hover:text-[#F5D76E]">
+                  Mở quản lý →
+                </span>
+              </Link>
+            )
+          )}
         </div>
       </section>
     </main>

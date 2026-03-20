@@ -1,0 +1,25 @@
+# Production (Netlify): Identity + Git Gateway — không bật local_backend.
+# Dev máy local: thêm tạm `local_backend: true` rồi chạy `npx decap-server` (xem DECAP_CMS_SETUP.md).
+
+backend:
+  name: git-gateway
+  branch: main
+
+media_folder: public/uploads
+public_folder: /uploads
+
+collections:
+  - name: news
+    label: Tin tức
+    label_singular: Bài viết
+    folder: content/news
+    create: true
+    slug: "{{slug}}"
+    extension: md
+    format: frontmatter
+    fields:
+      - { label: "Slug (tên file)", name: slug, widget: string, hint: "VD: huong-dan-nap-tien — khớp tên file .md" }
+      - { label: Tiêu đề, name: title, widget: string }
+      - { label: Mô tả ngắn, name: description, widget: string }
+      - { label: Ngày đăng, name: date, widget: datetime, date_format: YYYY-MM-DD, time_format: false }
+      - { label: Nội dung, name: body, widget: markdown }

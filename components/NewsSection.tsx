@@ -1,67 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePersistedAdmin } from "@/hooks/usePersistedAdmin";
 import { withAdminHref } from "@/lib/adminSession";
-import { NEWS_STORAGE_KEY, repairMojibake } from "@/lib/articleContent";
-import { getDefaultNewsPostCards, type NewsPostCard } from "@/lib/defaultNewsArticles";
+import type { NewsPostCard } from "@/lib/defaultNewsArticles";
+import { hrefNewsArticle } from "@/lib/newsLinks";
 
-type PostItem = NewsPostCard;
-
-/** Trùng khớp bài trong /news (DEFAULT_NEWS_ARTICLES) — tránh link chết trên Vercel khi chưa có localStorage */
-const FALLBACK_POSTS = getDefaultNewsPostCards();
-
-let cachedRaw: string | null | undefined;
-let cachedPosts: PostItem[] = FALLBACK_POSTS;
-
-function parsePosts(raw: string | null): PostItem[] {
-  if (!raw) return FALLBACK_POSTS;
-  try {
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed) || parsed.length === 0) return FALLBACK_POSTS;
-    const normalized = parsed
-      .filter((item) => item && typeof item.slug === "string" && typeof item.title === "string")
-      .map((item, index) => ({
-        slug: item.slug,
-        title: repairMojibake(item.title),
-        desc: typeof item.description === "string" ? repairMojibake(item.description) : "",
-        gradient: FALLBACK_POSTS[index % FALLBACK_POSTS.length].gradient,
-      }));
-    return normalized.length > 0 ? normalized : FALLBACK_POSTS;
-  } catch {
-    return FALLBACK_POSTS;
-  }
-}
-
-function getPostsSnapshot(): PostItem[] {
-  if (typeof window === "undefined") return FALLBACK_POSTS;
-  const raw = localStorage.getItem(NEWS_STORAGE_KEY);
-  if (raw === cachedRaw) return cachedPosts;
-  cachedRaw = raw;
-  cachedPosts = parsePosts(raw);
-  return cachedPosts;
-}
-
-function subscribe(onStoreChange: () => void): () => void {
-  if (typeof window === "undefined") return () => {};
-
-  const handleStorage = (event: StorageEvent) => {
-    if (event.key === NEWS_STORAGE_KEY) {
-      onStoreChange();
-    }
-  };
-  const handleFocus = () => onStoreChange();
-
-  window.addEventListener("storage", handleStorage);
-  window.addEventListener("focus", handleFocus);
-  return () => {
-    window.removeEventListener("storage", handleStorage);
-    window.removeEventListener("focus", handleFocus);
-  };
-}
-
-function getPostCoverImage(post: Pick<PostItem, "slug" | "title">): string | null {
+function getPostCoverImage(post: Pick<NewsPostCard, "slug" | "title">): string | null {
   const normalized = `${post.slug} ${post.title}`.toLowerCase();
   if (
     normalized.includes("huong-dan-tao-tai-khoan") ||
@@ -142,8 +88,8 @@ function SliderNavButton({
   );
 }
 
-export default function NewsSection() {
-  const posts = useSyncExternalStore(subscribe, getPostsSnapshot, () => FALLBACK_POSTS);
+export default function NewsSection({ posts }: { posts: NewsPostCard[] }) {
+  const bundledSlugs = useMemo(() => new Set(posts.map((p) => p.slug)), [posts]);
   const persistedAdmin = usePersistedAdmin();
 
   const trackRef = useRef<HTMLDivElement>(null);
@@ -224,7 +170,7 @@ export default function NewsSection() {
                 <p className="mt-3 leading-7 text-[#A7B0BE]">{post.desc}</p>
                 <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2">
                   <Link
-                    href={withAdminHref(`/news?slug=${encodeURIComponent(post.slug)}`, persistedAdmin)}
+                    href={withAdminHref(hrefNewsArticle(post.slug, undefined, bundledSlugs), persistedAdmin)}
                     className="inline-block text-sm font-bold text-[#D4AF37] transition hover:text-[#F5D76E]"
                   >
                     Xem thêm →

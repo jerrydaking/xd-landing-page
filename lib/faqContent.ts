@@ -6,8 +6,10 @@ export type FaqItem = {
   a: string;
 };
 
+/** Key localStorage — chỉ dùng khi admin soạn thảo / xuất nháp, không phải nguồn public */
 export const FAQ_STORAGE_KEY = "faq-items-v1";
 
+/** FAQ hiển thị cho khách (localhost & Vercel giống nhau) — sửa file này rồi commit để cập nhật production */
 export const DEFAULT_FAQS: FaqItem[] = [
   {
     id: "web-nay-da-la-web-hoan-chinh-chua",

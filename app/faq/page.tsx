@@ -53,12 +53,18 @@ function FaqContent() {
   const [editOpen, setEditOpen] = useState(false);
   const [form, setForm] = useState<FaqForm>({ q: "", a: "", id: "" });
 
+  /** Public: chỉ DEFAULT_FAQS trong repo. Admin: đọc localStorage để sửa / xuất nháp */
   useEffect(() => {
-    setFaqs(loadFaqsFromStorage());
+    if (isAdmin) {
+      setFaqs(loadFaqsFromStorage());
+    } else {
+      setFaqs(DEFAULT_FAQS);
+    }
     setReady(true);
-  }, []);
+  }, [isAdmin]);
 
   useEffect(() => {
+    if (!isAdmin) return;
     const handleMessage = (event: MessageEvent) => {
       if (!event.data || event.data.type !== SYNC_MESSAGE_TYPE) return;
       const incoming = normalizeFaqs(event.data.payload);
@@ -72,7 +78,7 @@ function FaqContent() {
     };
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
-  }, []);
+  }, [isAdmin]);
 
   useEffect(() => {
     if (mode !== "sync-export") return;
