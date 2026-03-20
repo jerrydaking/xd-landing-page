@@ -1,0 +1,155 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+html {
+  scroll-padding-top: 6rem;
+}
+
+body {
+  background: #0F1115;
+  color: #F5F7FA;
+}
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%) skewX(-12deg); opacity: 1; }
+  100% { transform: translateX(200%) skewX(-12deg); opacity: 1; }
+}
+
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 20px rgba(212, 175, 55, 0.35); }
+  50% { box-shadow: 0 0 28px rgba(212, 175, 55, 0.55); }
+}
+
+.btn-gold-effect {
+  position: relative;
+  overflow: hidden;
+}
+.btn-gold-effect::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    105deg,
+    transparent 0%,
+    transparent 35%,
+    rgba(255, 255, 255, 0.4) 50%,
+    transparent 65%,
+    transparent 100%
+  );
+  transform: translateX(-100%) skewX(-12deg);
+  pointer-events: none;
+}
+.btn-gold-effect:hover::after {
+  animation: shimmer 0.8s ease-out;
+}
+.btn-gold-effect:hover {
+  animation: glow-pulse 1.5s ease-in-out infinite;
+}
+
+/* Effect rất mạnh cho nút Nhận ngay (khuyến mãi) */
+@keyframes promo-shine {
+  0% { left: -100%; }
+  100% { left: 100%; }
+}
+
+@keyframes promo-glow-breathe {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(212, 175, 55, 0.6), 0 0 40px rgba(245, 215, 110, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 35px rgba(212, 175, 55, 0.9), 0 0 70px rgba(245, 215, 110, 0.5);
+  }
+}
+
+@keyframes promo-hover-pulse {
+  0%, 100% {
+    transform: scale(1.05);
+    box-shadow: 0 0 30px rgba(212, 175, 55, 0.8), 0 0 60px rgba(245, 215, 110, 0.5);
+  }
+  50% {
+    transform: scale(1.12);
+    box-shadow: 0 0 45px rgba(212, 175, 55, 1), 0 0 90px rgba(245, 215, 110, 0.6);
+  }
+}
+
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+.btn-promo-strong {
+  position: relative;
+  overflow: hidden;
+  animation: promo-glow-breathe 2s ease-in-out infinite;
+}
+.btn-promo-strong:hover {
+  animation: promo-hover-pulse 0.6s ease-in-out infinite;
+}
+.btn-promo-strong::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.9),
+    transparent
+  );
+  transform: skewX(-20deg);
+  pointer-events: none;
+  z-index: 1;
+}
+.btn-promo-strong:hover::before {
+  animation: promo-shine 0.8s ease-out forwards;
+}
+
+/* ——— Announcement bar (ticker) ——— */
+/* Wrapper: căn giữa, không tràn */
+.announcement-ticker-wrap {
+  min-height: 1.5rem;
+}
+/* Typography + màu: vàng sang, nhẹ, dễ đọc */
+.announcement-ticker-text {
+  font-size: 0.8125rem;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  line-height: 1.5;
+  color: #e8d48a;
+  text-shadow: 0 0 20px rgba(212, 175, 55, 0.12);
+}
+@media (min-width: 768px) {
+  .announcement-ticker-text {
+    font-size: 0.875rem;
+  }
+}
+/* Animation: chạy từ phải sang trái, 1 câu xong thì chuyển câu (logic trong component) */
+@keyframes announcement-ticker-scroll {
+  0% {
+    transform: translateX(100vw);
+  }
+  100% {
+    transform: translateX(-100vw);
+  }
+}
