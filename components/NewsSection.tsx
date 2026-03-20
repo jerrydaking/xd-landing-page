@@ -5,54 +5,37 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import { usePersistedAdmin } from "@/hooks/usePersistedAdmin";
 import { withAdminHref } from "@/lib/adminSession";
 import { NEWS_STORAGE_KEY, repairMojibake } from "@/lib/articleContent";
+import { getDefaultNewsPostCards, type NewsPostCard } from "@/lib/defaultNewsArticles";
 
-type PostItem = { slug: string; title: string; desc: string; gradient: string };
+type PostItem = NewsPostCard;
 
-const POSTS: PostItem[] = [
-  {
-    slug: "huong-dan-dang-ky-tai-khoan-nhanh",
-    title: "Hướng dẫn đăng ký tài khoản nhanh",
-    desc: "Mẫu bài viết SEO cơ bản để tăng độ đầy đủ cho landing page.",
-    gradient: "from-[#2A2110] via-[#171A21] to-[#0F1115]",
-  },
-  {
-    slug: "cach-nhan-uu-dai-thanh-vien-moi",
-    title: "Cách nhận ưu đãi thành viên mới",
-    desc: "Có thể dùng làm block nội dung phụ ở trang chủ hoặc blog.",
-    gradient: "from-[#1E222A] via-[#171A21] to-[#0F1115]",
-  },
-  {
-    slug: "meo-toi-uu-giao-dien-chuyen-doi-cao",
-    title: "Mẹo tối ưu giao diện chuyển đổi cao",
-    desc: "Thêm phần tin tức giúp trang nhìn giống website thật hơn.",
-    gradient: "from-[#221c12] via-[#171A21] to-[#0F1115]",
-  },
-];
+/** Trùng khớp bài trong /news (DEFAULT_NEWS_ARTICLES) — tránh link chết trên Vercel khi chưa có localStorage */
+const FALLBACK_POSTS = getDefaultNewsPostCards();
 
 let cachedRaw: string | null | undefined;
-let cachedPosts: PostItem[] = POSTS;
+let cachedPosts: PostItem[] = FALLBACK_POSTS;
 
 function parsePosts(raw: string | null): PostItem[] {
-  if (!raw) return POSTS;
+  if (!raw) return FALLBACK_POSTS;
   try {
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed) || parsed.length === 0) return POSTS;
+    if (!Array.isArray(parsed) || parsed.length === 0) return FALLBACK_POSTS;
     const normalized = parsed
       .filter((item) => item && typeof item.slug === "string" && typeof item.title === "string")
       .map((item, index) => ({
         slug: item.slug,
         title: repairMojibake(item.title),
         desc: typeof item.description === "string" ? repairMojibake(item.description) : "",
-        gradient: POSTS[index % POSTS.length].gradient,
+        gradient: FALLBACK_POSTS[index % FALLBACK_POSTS.length].gradient,
       }));
-    return normalized.length > 0 ? normalized : POSTS;
+    return normalized.length > 0 ? normalized : FALLBACK_POSTS;
   } catch {
-    return POSTS;
+    return FALLBACK_POSTS;
   }
 }
 
 function getPostsSnapshot(): PostItem[] {
-  if (typeof window === "undefined") return POSTS;
+  if (typeof window === "undefined") return FALLBACK_POSTS;
   const raw = localStorage.getItem(NEWS_STORAGE_KEY);
   if (raw === cachedRaw) return cachedPosts;
   cachedRaw = raw;
@@ -160,7 +143,7 @@ function SliderNavButton({
 }
 
 export default function NewsSection() {
-  const posts = useSyncExternalStore(subscribe, getPostsSnapshot, () => POSTS);
+  const posts = useSyncExternalStore(subscribe, getPostsSnapshot, () => FALLBACK_POSTS);
   const persistedAdmin = usePersistedAdmin();
 
   const trackRef = useRef<HTMLDivElement>(null);
