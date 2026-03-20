@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="noindex, nofollow" />
-    <title>Quản trị nội dung — Decap CMS</title>
+    <title>Decap CMS — /cms</title>
     <style>
       #ni-admin-bar {
         position: fixed;
@@ -46,13 +46,13 @@
   <body>
     <div id="ni-admin-bar">
       <span>Netlify Identity</span>
+      <a href="/admin" style="color: #d4af37; font-size: 12px">← /admin</a>
       <button type="button" id="ni-open-login">Đăng nhập / thử widget</button>
       <span id="ni-status" style="display: none; color: #f5d76e"></span>
       <button type="button" id="ni-logout" style="display: none">Đăng xuất</button>
     </div>
     <div id="ni-spacer" aria-hidden="true"></div>
 
-    <!-- Identity phải load trước Decap (Git Gateway dùng cùng phiên đăng nhập) -->
     <script src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
     <script>
       (function () {
@@ -119,7 +119,6 @@
       })();
     </script>
 
-    <!-- Decap CMS (Git-based): cấu hình tại ./config.yml -->
     <script src="https://unpkg.com/decap-cms@3/dist/decap-cms.js"></script>
   </body>
 </html>

@@ -6,25 +6,27 @@ Hướng dẫn triển khai **Decap CMS** trên **Netlify**, repo Git, và site 
 
 | Đường dẫn | Mô tả |
 |-----------|--------|
-| `public/admin/index.html` | UI Decap (CDN `decap-cms@3`) |
-| `public/admin/config.yml` | Collection `news` → `content/news/*.md` |
+| `app/admin/page.tsx` | **Netlify Identity** — đăng nhập / invite / recovery (Next.js, không còn form email+mật khẩu tùy chỉnh). |
+| `public/cms/index.html` | **Decap CMS** (CDN) + Identity (CDN) — mở sau khi đăng nhập tại `/admin` hoặc dùng widget trên `/cms`. |
+| `public/cms/config.yml` | Collection `news` → `content/news/*.md` |
 | `content/news/` | Bài viết Markdown + front matter |
 | `public/uploads/` | Ảnh upload từ CMS → URL `/uploads/...` |
 
-**Lưu ý:** Bảng điều khiển **localStorage** (FAQ, game guides, v.v.) nằm tại **`/site-admin`**. Trang **`/admin/`** (file tĩnh) = **Decap CMS** + **Netlify Identity**.
+**Lưu ý:** **`/site-admin`** = hub localStorage (FAQ / game guides) — giờ cũng **chỉ mở sau khi đăng nhập Netlify Identity** (cùng widget, không còn form env). **`/admin`** = cổng Identity; **`/cms/`** = Decap.
 
 ### Netlify Identity Widget (invite / khôi phục mật khẩu)
 
-- **Các trang Next.js** (`/`, `/news`, …): `components/NetlifyIdentityProvider.tsx` bọc nội dung trong `app/layout.tsx`, khởi tạo `netlify-identity-widget` **chỉ trên client** (dynamic import), tự `open()` khi `location.hash` có `invite_token`, `recovery_token` hoặc `confirmation_token`.
-- **Trang Decap** (`public/admin/index.html`): không đi qua App Router nên **không** có layout React — đã nhúng script Identity (CDN) + thanh cố định (nút đăng nhập / đăng xuất) và cùng logic mở widget theo hash.
-- **Biến tuỳ chọn:** `NEXT_PUBLIC_NETLIFY_IDENTITY_URL` — xem `.env.example` (mặc định trên Netlify: `/.netlify/identity` trên cùng origin).
+- **Toàn site:** `lib/netlifyIdentitySingleton.ts` + `NetlifyIdentityProvider` trong `app/layout.tsx` — một lần `init`, tự `open()` khi hash có token (mọi route, kể cả trang chủ).
+- **`/admin`:** UI nút “Đăng nhập quản trị”, log debug console (tạm), sau login có link **Mở Decap CMS** → `/cms/`.
+- **`/cms/`** (file tĩnh): Decap + Identity CDN (dùng khi bookmark trực tiếp `/cms/`).
+- **Biến tuỳ chọn:** `NEXT_PUBLIC_NETLIFY_IDENTITY_URL` — xem `.env.example`.
 
 ---
 
 ## 1. Chuẩn bị repo Git
 
 1. Khởi tạo Git và push lên GitHub/GitLab/Bitbucket (Netlify kết nối được).
-2. Trong `public/admin/config.yml`, chỉnh **`branch`** cho khớp nhánh mặc định (ví dụ `main`).
+2. Trong `public/cms/config.yml`, chỉnh **`branch`** cho khớp nhánh mặc định (ví dụ `main`).
 
 ---
 
@@ -49,7 +51,7 @@ Decap cần **Netlify Identity** và **Git Gateway** để commit file lên repo
 
 ## 4. Chỉnh `config.yml` cho production
 
-Trong `public/admin/config.yml`:
+Trong `public/cms/config.yml`:
 
 1. **Tắt** `local_backend` (xóa dòng hoặc đặt `local_backend: false`).  
    - `local_backend: true` chỉ dùng khi chạy [`decap-server`](https://decapcms.org/docs/working-with-a-local-git-repository/) trên máy dev.
@@ -65,7 +67,7 @@ Sau khi sửa, commit và push — Netlify build lại.
 
 ---
 
-## 5. Redirect `/admin` (khuyến nghị)
+## 5. Redirect `/cms` (khuyến nghị)
 
 Thêm file **`netlify.toml`** ở root repo (nếu chưa có):
 
@@ -75,20 +77,19 @@ Thêm file **`netlify.toml`** ở root repo (nếu chưa có):
   publish = "out"
 
 [[redirects]]
-  from = "/admin"
-  to = "/admin/"
+  from = "/cms"
+  to = "/cms/"
   status = 301
 ```
 
-Giúp trình duyệt vào thống nhất thư mục chứa `index.html` của Decap.
+Giúp vào thống nhất `out/cms/index.html` (Decap).
 
 ---
 
 ## 6. Dùng CMS sau khi deploy
 
-1. Mở **`https://<site-của-bạn>.netlify.app/admin/`** (có dấu `/` cuối nếu cần).
-2. Đăng nhập bằng **Netlify Identity** (email mời).
-3. Tạo/sửa bài trong **Tin tức** → Decap commit file vào `content/news/`.
+1. Mở **`https://<site-của-bạn>.netlify.app/admin`** — đăng nhập **Netlify Identity** (invite / recovery qua hash).
+2. Bấm **Mở Decap CMS** hoặc vào **`/cms/`** — soạn **Tin tức** → Decap commit vào `content/news/`.
 4. Netlify build lại → trang `/news` và `/news/[slug]` đọc markdown mới (static).
 
 ---
@@ -102,7 +103,7 @@ Giúp trình duyệt vào thống nhất thư mục chứa `index.html` của De
 npx decap-server
 ```
 
-3. Chạy Next: `npm run dev` — mở `/admin/` để soạn bài commit trực tiếp vào repo local.
+3. Chạy Next: `npm run dev` — mở `/admin` (Identity) rồi `/cms/` (Decap) nếu cần soạn local.
 
 ---
 
@@ -110,8 +111,8 @@ npx decap-server
 
 ### Tạo mới
 
-- `public/admin/index.html` — Decap CMS (CDN)
-- `public/admin/config.yml` — collection `news`
+- `public/cms/index.html` — Decap CMS (CDN)
+- `public/cms/config.yml` — collection `news`
 - `public/uploads/.gitkeep` — thư mục ảnh upload (URL `/uploads/...`)
 - `content/news/huong-dan-nap-rut-sieu-toc.md` — bài mẫu 1
 - `content/news/cach-nhan-uu-dai-thanh-vien-moi.md` — bài mẫu 2
@@ -133,29 +134,24 @@ npx decap-server
 - `app/news/page.tsx` — server: `getAllNewsArticles()` → `NewsContent`
 - `app/news/[slug]/page.tsx` — `generateStaticParams` từ `getNewsSlugs()`
 - `app/sitemap.ts` — tin tức từ `getAllNewsArticles()`
-- `app/robots.ts` — thêm `disallow` `/site-admin`
+- `app/robots.ts` — `disallow` `/admin`, `/site-admin`, `/cms`, …
 
-### Netlify Identity Widget (bổ sung)
+### Netlify Identity + `/admin` (App Router)
 
-**Tạo mới**
+**Tạo / sửa**
 
-- `components/NetlifyIdentityProvider.tsx` — init widget trên client, mở theo hash
-- `lib/netlifyIdentityApiUrl.ts` — URL API Identity (env hoặc `/.netlify/identity`)
-- `types/netlify-identity-widget.d.ts` — khai báo module
-
-**Sửa**
-
-- `app/layout.tsx` — bọc `NetlifyIdentityProvider`
-- `public/admin/index.html` — script Identity (CDN), thanh nút đăng nhập / đăng xuất, hash
+- `app/admin/page.tsx`, `app/admin/layout.tsx` — cổng Netlify Identity (không form env).
+- `lib/netlifyIdentitySingleton.ts` — init một lần + mở widget theo hash.
+- `components/NetlifyIdentityProvider.tsx` — gọi singleton + `attachIdentityHashAutoOpen`.
+- `public/cms/index.html` — Decap + Identity CDN (bookmark `/cms/`).
+- `lib/netlifyIdentityApiUrl.ts`, `types/netlify-identity-widget.d.ts`
 - `package.json` — `netlify-identity-widget`
-- `tsconfig.json` — include `types/**/*.d.ts`
 - `.env.example` — `NEXT_PUBLIC_NETLIFY_IDENTITY_URL` (tuỳ chọn)
-- `DECAP_CMS_SETUP.md` — mục Identity
 
 ### Xoá / đổi route
 
-- `app/admin/page.tsx`, `app/admin/layout.tsx` — **xoá** (nhường `/admin` cho file tĩnh Decap)
-- Hub cũ chuyển sang **`/site-admin`**
+- **`public/admin/*`** — đã chuyển Decap sang **`public/cms/`** để Next.js dùng **`/admin`** (trang Identity).
+- Hub localStorage: **`/site-admin`** — không còn form email/mật khẩu env.
 
 ---
 
@@ -165,7 +161,7 @@ npx decap-server
 |------------|--------|
 | CMS không đăng nhập được | Bật Identity + Git Gateway; user đã được mời |
 | Không commit được file | Kiểm tra quyền repo; branch trong `config.yml` đúng |
-| `/admin` 404 | Kiểm tra `out/admin/index.html` sau build; thêm redirect `/admin` → `/admin/` |
+| `/admin` 404 | Kiểm tra `out/admin.html` (Next). Decap nằm tại `out/cms/index.html` |
 | Bài mới không hiện | Cần **build lại** sau khi Git có file mới trong `content/news/` |
 
 ---
